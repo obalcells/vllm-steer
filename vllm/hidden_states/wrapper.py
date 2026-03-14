@@ -34,8 +34,11 @@ class VLLMTransformerLayerWrapper(nn.Module):
         # Call original layer's forward method
         output = self.base_layer(*args, **kwargs)
 
-        # Extract hidden states using vLLM's logic
-        if self.store is not None:
+        # Only extract hidden states when capture is actively enabled.
+        # Skip extraction when disabled to avoid unnecessary computation
+        # (the h+r addition creates temporary tensors that can affect
+        # GPU scheduling and floating-point determinism).
+        if self.store is not None and self.store.capture_enabled:
             hidden_states = self._extract_hidden_states_vllm_style(output)
 
             # Store the complete hidden states

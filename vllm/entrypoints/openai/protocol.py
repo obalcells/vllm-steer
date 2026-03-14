@@ -48,6 +48,7 @@ from openai.types.responses.response_reasoning_item import (
     Content as ResponseReasoningTextContent,
 )
 from openai_harmony import Message as OpenAIHarmonyMessage
+from vllm.steer_vectors.request import SteerVectorRequest, VectorConfig
 
 from vllm.config.pooler import get_use_activation
 from vllm.tasks import PoolingTask
@@ -530,6 +531,49 @@ class ResponsesRequest(OpenAIBaseModel):
         return data
 
 
+class SteerVectorParam(OpenAIBaseModel):
+    """JSON-friendly mirror of SteerVectorRequest for the HTTP API."""
+    steer_vector_name: str
+    steer_vector_int_id: int
+    steer_vector_local_path: str = ""
+    debug: bool = False
+    conflict_resolution: str = "priority"
+    # single-vector mode
+    scale: float = 1.0
+    target_layers: list[int] | None = None
+    prefill_trigger_tokens: list[int] | None = None
+    prefill_trigger_positions: list[int] | None = None
+    prefill_exclude_tokens: list[int] | None = None
+    prefill_exclude_positions: list[int] | None = None
+    generate_trigger_tokens: list[int] | None = None
+    algorithm: str = "direct"
+    normalize: bool = False
+    # multi-vector mode
+    vector_configs: list[dict] | None = None
+
+    def to_steer_vector_request(self) -> SteerVectorRequest:
+        vcs = None
+        if self.vector_configs:
+            vcs = [VectorConfig(**vc) for vc in self.vector_configs]
+        return SteerVectorRequest(
+            steer_vector_name=self.steer_vector_name,
+            steer_vector_int_id=self.steer_vector_int_id,
+            steer_vector_local_path=self.steer_vector_local_path,
+            debug=self.debug,
+            conflict_resolution=self.conflict_resolution,
+            scale=self.scale,
+            target_layers=self.target_layers,
+            prefill_trigger_tokens=self.prefill_trigger_tokens,
+            prefill_trigger_positions=self.prefill_trigger_positions,
+            prefill_exclude_tokens=self.prefill_exclude_tokens,
+            prefill_exclude_positions=self.prefill_exclude_positions,
+            generate_trigger_tokens=self.generate_trigger_tokens,
+            algorithm=self.algorithm,
+            normalize=self.normalize,
+            vector_configs=vcs,
+        )
+
+
 class ChatCompletionRequest(OpenAIBaseModel):
     # Ordered by official OpenAI API documentation
     # https://platform.openai.com/docs/api-reference/chat/create
@@ -721,6 +765,11 @@ class ChatCompletionRequest(OpenAIBaseModel):
             "default: 0). Any priority other than 0 will raise an error "
             "if the served model does not use priority scheduling."
         ),
+    )
+    steer_vector: SteerVectorParam | None = Field(
+        default=None,
+        description="Steering vector to apply during generation. "
+                    "Requires server launched with --enable-steer-vector.",
     )
     request_id: str = Field(
         default_factory=lambda: f"{random_uuid()}",
@@ -1216,6 +1265,11 @@ class CompletionRequest(OpenAIBaseModel):
             "if the served model does not use priority scheduling."
         ),
     )
+    steer_vector: SteerVectorParam | None = Field(
+        default=None,
+        description="Steering vector to apply during generation. "
+                    "Requires server launched with --enable-steer-vector.",
+    )
     request_id: str = Field(
         default_factory=lambda: f"{random_uuid()}",
         description=(
@@ -1526,6 +1580,11 @@ class EmbeddingCompletionRequest(OpenAIBaseModel):
             "if the served model does not use priority scheduling."
         ),
     )
+    steer_vector: SteerVectorParam | None = Field(
+        default=None,
+        description="Steering vector to apply during generation. "
+                    "Requires server launched with --enable-steer-vector.",
+    )
     request_id: str = Field(
         default_factory=lambda: f"{random_uuid()}",
         description=(
@@ -1620,6 +1679,11 @@ class EmbeddingChatRequest(OpenAIBaseModel):
             "default: 0). Any priority other than 0 will raise an error "
             "if the served model does not use priority scheduling."
         ),
+    )
+    steer_vector: SteerVectorParam | None = Field(
+        default=None,
+        description="Steering vector to apply during generation. "
+                    "Requires server launched with --enable-steer-vector.",
     )
     request_id: str = Field(
         default_factory=lambda: f"{random_uuid()}",

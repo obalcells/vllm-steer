@@ -22,6 +22,7 @@ else:
     from typing_extensions import TypedDict
 
 import vllm.envs as envs
+from vllm.steer_vectors.request import SteerVectorRequest
 from vllm.beam_search import BeamSearchSequence, create_sort_beams_key_function
 from vllm.engine.protocol import EngineClient
 from vllm.entrypoints.chat_utils import (
@@ -1158,6 +1159,7 @@ class OpenAIServing:
         lora_request: LoRARequest | None,
         trace_headers: Mapping[str, str] | None,
         priority: int,
+        steer_vector_request: SteerVectorRequest | None = None,
     ) -> tuple[EngineCoreRequest, dict[str, Any]]:
         """Use the Processor to process inputs for AsyncLLM."""
         tokenization_kwargs: dict[str, Any] = {}
@@ -1170,6 +1172,7 @@ class OpenAIServing:
             engine_prompt,
             params,
             lora_request=lora_request,
+            steer_vector_request=steer_vector_request,
             tokenization_kwargs=tokenization_kwargs,
             trace_headers=trace_headers,
             priority=priority,

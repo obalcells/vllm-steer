@@ -191,7 +191,16 @@ class DecoderLayerWithSteerVector(BaseLayerWithSteerVector):
 
         # Dynamically get the currently active algorithm and apply intervention
         active_algo = self._get_or_create_algorithm(self.active_algorithm_name)
-        
+
+        # Fast path: skip extraction/reconstruction when intervention is a no-op.
+        # This avoids collapsing (hidden_states, residual) → (hidden_states+residual, zeros)
+        # which causes floating-point divergence even though it's mathematically equivalent.
+        if not active_algo.params.has_any_triggers():
+            return output
+        algo_params = active_algo._get_params()
+        if not active_algo._is_valid(algo_params):
+            return output
+
         # Extract hidden_states and residual from decoder layer output
         hidden_states, residual, other_outputs, original_format = _extract_hidden_states_and_residual(output)
 

@@ -48,39 +48,54 @@ class DirectAlgorithm(AlgorithmTemplate):
     
     @classmethod
     def _load_from_pt(cls, path: str, device: str, **kwargs) -> dict:
-        """Load Direct steer vector from PT file."""
+        """Load Direct steer vector from PT file.
+
+        Supports two tensor formats:
+        - 1D [d_model]: same vector applied to all target_layers
+        - 2D [num_layers, d_model]: index by layer (e.g., from mean-diff extraction)
+        """
         import torch
-        
+
         config = kwargs.get("config")
         target_layers = kwargs.get("target_layers")
         if target_layers is None:
             raise ValueError("Loading .pt files requires 'target_layers' in kwargs")
-            
-        # Use the first target layer for loading PT file
+
         if not target_layers:
             raise ValueError("target_layers list cannot be empty")
-            
-        target_layer = target_layers[0]
-        
+
         try:
-            # Load tensor from PT file
-            # Use weights_only=False to handle PyTorch 2.6+ behavior
             vector = torch.load(path, map_location=device, weights_only=False)
-            
-            # Handle numpy array and convert to tensor
+
             if isinstance(vector, np.ndarray):
                 vector = torch.tensor(vector, device=device)
-            # Ensure vector is in correct format and convert to required dtype
             elif not isinstance(vector, torch.Tensor):
                 raise ValueError(f"PT file does not contain a tensor or numpy array: {type(vector)}")
-                
+
             vector = vector.to(device).to(config.adapter_dtype)
-            
-            # Use the specified target layer
-            sv_weights = {target_layer: vector}
-            
+
+            sv_weights = {}
+            if vector.dim() == 1:
+                # 1D: same vector for all target layers
+                for layer in target_layers:
+                    sv_weights[layer] = vector
+            elif vector.dim() == 2:
+                # 2D [num_layers, d_model]: index by layer
+                for layer in target_layers:
+                    if layer >= vector.shape[0]:
+                        raise ValueError(
+                            f"target_layer {layer} out of range for direction tensor "
+                            f"with {vector.shape[0]} layers"
+                        )
+                    sv_weights[layer] = vector[layer]
+            else:
+                raise ValueError(
+                    f"PT file tensor has unsupported shape {vector.shape}. "
+                    f"Expected 1D [d_model] or 2D [num_layers, d_model]."
+                )
+
             return {"layer_payloads": sv_weights}
-            
+
         except Exception as e:
             raise ValueError(f"Failed to load PT file: {e}") from e
     

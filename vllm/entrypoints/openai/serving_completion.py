@@ -117,6 +117,12 @@ class OpenAIServingCompletion(OpenAIServing):
         try:
             lora_request = self._maybe_get_adapters(request)
 
+            steer_vector_request = (
+                request.steer_vector.to_steer_vector_request()
+                if request.steer_vector is not None
+                else None
+            )
+
             if self.model_config.skip_tokenizer_init:
                 tokenizer = None
             else:
@@ -216,6 +222,7 @@ class OpenAIServingCompletion(OpenAIServing):
                         lora_request=lora_request,
                         trace_headers=trace_headers,
                         priority=request.priority,
+                        steer_vector_request=steer_vector_request,
                     )
 
                     generator = self.engine_client.generate(

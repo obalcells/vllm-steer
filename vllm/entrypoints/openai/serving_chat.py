@@ -183,6 +183,12 @@ class OpenAIServingChat(OpenAIServing):
                 request, supports_default_mm_loras=True
             )
 
+            steer_vector_request = (
+                request.steer_vector.to_steer_vector_request()
+                if request.steer_vector is not None
+                else None
+            )
+
             model_name = self.models.model_name(lora_request)
 
             tokenizer = await self.engine_client.get_tokenizer()
@@ -323,6 +329,7 @@ class OpenAIServingChat(OpenAIServing):
                         lora_request=lora_request,
                         trace_headers=trace_headers,
                         priority=request.priority,
+                        steer_vector_request=steer_vector_request,
                     )
 
                     generator = self.engine_client.generate(
