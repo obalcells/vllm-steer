@@ -2950,8 +2950,13 @@ class GPUModelRunner(
                 )
             # Wrap model with steer vector support if enabled
             self.model = self._wrap_model_with_steer_vectors(self.model)
-            # Wrap model for hidden states capture
-            self.model = self._wrap_model_for_hidden_states(self.model)
+            # Hidden-states capture wrapping is DISABLED: it's dead code for the
+            # OpenAI API server (enable_hidden_states_capture is never called),
+            # and the extra nn.Module wrapper breaks LlamaModel under TP>=2 with
+            # long prompts — suspected interaction with @support_torch_compile
+            # guard/recompile behavior across ranks. See
+            # sdf-honeypots/docs/vllm_steer_llama_tp2_bug.md.
+            # self.model = self._wrap_model_for_hidden_states(self.model)
             if hasattr(self, "drafter"):
                 logger.info("Loading drafter model...")
                 self.drafter.load_model(self.model)

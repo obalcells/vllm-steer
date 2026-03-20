@@ -185,18 +185,25 @@ class DecoderLayerWithSteerVector(BaseLayerWithSteerVector):
         algo = self._get_or_create_algorithm(self.active_algorithm_name)
         algo.set_active_tensor(index)
 
+    def __getattr__(self, name: str):
+        """Delegate attribute access to the wrapped layer."""
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self.base_layer, name)
+
     def forward(self, *args, **kwargs):
         """Wrap the forward method of DecoderLayer."""
-        output = self.base_layer(*args, **kwargs)
-
-        # Dynamically get the currently active algorithm and apply intervention
-        active_algo = self._get_or_create_algorithm(self.active_algorithm_name)
-
         # Fast path: skip extraction/reconstruction when intervention is a no-op.
         # This avoids collapsing (hidden_states, residual) → (hidden_states+residual, zeros)
         # which causes floating-point divergence even though it's mathematically equivalent.
-        if not active_algo.params.has_any_triggers():
-            return output
+        # Check BEFORE calling base_layer to minimize Python overhead between
+        # the inner forward and the return (reduces TP timing perturbation).
+        active_algo = self.algorithms.get(self.active_algorithm_name)
+        if active_algo is None or not active_algo.params.has_any_triggers():
+            return self.base_layer(*args, **kwargs)
+
+        output = self.base_layer(*args, **kwargs)
         algo_params = active_algo._get_params()
         if not active_algo._is_valid(algo_params):
             return output
