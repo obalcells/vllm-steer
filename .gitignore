@@ -239,3 +239,11 @@ vllm/grpc/vllm_engine_pb2.py
 vllm/grpc/vllm_engine_pb2_grpc.py
 vllm/grpc/vllm_engine_pb2.pyi
 vllm/_version.py
+
+# Pre-compiled artifacts symlinked from installed wheel (see link_precompiled.sh)
+vllm/**/*.so
+vllm/_version.py
+vllm/third_party/
+vllm/grpc/vllm_engine_pb2*.py
+vllm/grpc/vllm_engine_pb2*.pyi
+
