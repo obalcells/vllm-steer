@@ -357,6 +357,8 @@ class OpenAIServingChat(OpenAIServing):
             )
 
             model_name = self.models.model_name(lora_request)
+
+            await self._maybe_set_steer_vector(request)
         except (ValueError, TypeError, RuntimeError) as e:
             logger.exception("Error preparing request components")
             return self.create_error_response(e)

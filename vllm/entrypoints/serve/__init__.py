@@ -92,3 +92,9 @@ def register_vllm_serve_api_routers(app: FastAPI):
     )
 
     attach_server_info_router(app)
+
+    from vllm.entrypoints.serve.steer.api_router import (
+        attach_router as attach_steer_router,
+    )
+
+    attach_steer_router(app)

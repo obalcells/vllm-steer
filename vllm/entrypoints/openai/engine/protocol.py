@@ -164,6 +164,22 @@ class StreamOptions(OpenAIBaseModel):
     continuous_usage_stats: bool | None = False
 
 
+class SteerVectorParam(OpenAIBaseModel):
+    steer_vector_name: str
+    steer_vector_int_id: int
+    steer_vector_local_path: str = ""
+    scale: float = 1.0
+    target_layers: list[int] | None = None
+    prefill_trigger_tokens: list[int] | None = None
+    generate_trigger_tokens: list[int] | None = None
+    algorithm: str = "direct"
+    normalize: bool = False
+    hook: str = "pre"
+
+    def to_spec_dict(self) -> dict[str, Any]:
+        return self.model_dump(exclude_none=False)
+
+
 class FunctionDefinition(OpenAIBaseModel):
     name: str
     description: str | None = None

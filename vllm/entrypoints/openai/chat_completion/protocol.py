@@ -27,6 +27,7 @@ from vllm.entrypoints.openai.engine.protocol import (
     LegacyStructuralTagResponseFormat,
     LogitsProcessors,
     OpenAIBaseModel,
+    SteerVectorParam,
     StreamOptions,
     StructuralTagResponseFormat,
     ToolCall,
@@ -351,6 +352,17 @@ class ChatCompletionRequest(OpenAIBaseModel):
         description=(
             "Additional request parameters with (list of) string or "
             "numeric values, used by custom extensions."
+        ),
+    )
+
+    steer_vector: SteerVectorParam | None = Field(
+        default=None,
+        description=(
+            "Activation-steering configuration. Adds scale*direction[layer] "
+            "to the residual-stream input of each target_layer. The server "
+            "must be launched with --enforce-eager. Requires a server-local "
+            ".pt file path. Steering is global across concurrent requests; "
+            "send a request with steer_vector=null to clear."
         ),
     )
 

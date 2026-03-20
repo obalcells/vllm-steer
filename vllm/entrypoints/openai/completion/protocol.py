@@ -15,6 +15,7 @@ from pydantic import (
 )
 
 from vllm.entrypoints.openai.engine.protocol import (
+    SteerVectorParam,
     AnyResponseFormat,
     LegacyStructuralTagResponseFormat,
     LogitsProcessors,
@@ -174,6 +175,12 @@ class CompletionRequest(OpenAIBaseModel):
             "Additional request parameters with string or "
             "numeric values, used by custom extensions."
         ),
+    )
+
+    steer_vector: SteerVectorParam | None = Field(
+        default=None,
+        description="Activation-steering configuration. See "
+        "ChatCompletionRequest.steer_vector.",
     )
 
     # --8<-- [end:completion-extra-params]

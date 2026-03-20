@@ -262,6 +262,31 @@ class OpenAIServing:
         self.renderer = self.models.renderer
         self.model_config = self.models.model_config
         self.max_model_len = self.model_config.max_model_len
+        self._steer_last_key: str | None = None
+        self._steer_lock = asyncio.Lock()
+
+    async def _maybe_set_steer_vector(self, request) -> None:
+        sv = getattr(request, "steer_vector", None)
+        if sv is None:
+            return
+        spec = sv.to_spec_dict() if hasattr(sv, "to_spec_dict") else dict(sv)
+        key = json.dumps(spec, sort_keys=True)
+        async with self._steer_lock:
+            if key == self._steer_last_key:
+                return
+            await self.engine_client.collective_rpc(
+                "set_steer_vector", args=(spec,)
+            )
+            self._steer_last_key = key
+
+    async def clear_steer_vector(self) -> None:
+        async with self._steer_lock:
+            if self._steer_last_key is None:
+                return
+            await self.engine_client.collective_rpc(
+                "set_steer_vector", args=(None,)
+            )
+            self._steer_last_key = None
 
     def _get_tool_parser(
         self, tool_parser_name: str | None = None, enable_auto_tools: bool = False

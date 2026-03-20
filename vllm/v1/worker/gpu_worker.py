@@ -672,6 +672,25 @@ class Worker(WorkerBase):
     def add_lora(self, lora_request: LoRARequest) -> bool:
         return self.model_runner.add_lora(lora_request)
 
+    def set_steer_vector(self, spec: dict | None) -> bool:
+        from vllm.steer import get_steer_state, install_steer_hooks
+        from vllm.steer.request import SteerVectorRequest
+
+        state = get_steer_state()
+        if not state._handles:
+            if not self.model_config.enforce_eager:
+                raise RuntimeError(
+                    "steering requires --enforce-eager (forward hooks are "
+                    "incompatible with CUDA graphs / torch.compile)"
+                )
+            install_steer_hooks(self.model_runner.get_model())
+        if spec is None:
+            state.clear()
+            return True
+        req = SteerVectorRequest(**spec)
+        state.set_active(req)
+        return True
+
     def remove_lora(self, lora_id: int) -> bool:
         return self.model_runner.remove_lora(lora_id)
 
