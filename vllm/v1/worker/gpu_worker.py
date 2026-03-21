@@ -722,11 +722,15 @@ class Worker(WorkerBase):
                     return {"ok": False, "error": f"missing layer {i}"}
                 layer_tensors.append(t)
             stacked = _torch.stack(layer_tensors, dim=0)
-            if arg:
+            # Only TP rank 0 saves (residual is full-width, identical across ranks).
+            from vllm.distributed.parallel_state import get_tp_group
+            tp_rank = get_tp_group().rank_in_group
+            if arg and tp_rank == 0:
                 _torch.save(stacked, arg)
             return {"ok": True, "n_layers": n_layers,
                     "shape": list(stacked.shape),
-                    "saved": arg}
+                    "saved": arg if tp_rank == 0 else None,
+                    "tp_rank": tp_rank}
 
         return {"ok": False, "error": f"unknown cmd {cmd!r}"}
 
