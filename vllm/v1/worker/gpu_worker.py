@@ -691,6 +691,45 @@ class Worker(WorkerBase):
         state.set_active(req)
         return True
 
+    def steer_capture(self, cmd: str, arg: str | None = None) -> dict:
+        """Activation-capture control for direction extraction via vLLM.
+        cmd='start' [arg=json positions list] / cmd='stop' [arg=save_path]."""
+        import json as _json
+        import torch as _torch
+        from vllm.steer import get_steer_state, install_steer_hooks
+
+        state = get_steer_state()
+        if not state._handles:
+            if not self.model_config.enforce_eager:
+                raise RuntimeError("capture requires --enforce-eager")
+            install_steer_hooks(self.model_runner.get_model())
+
+        if cmd == "start":
+            positions = _json.loads(arg) if arg else None
+            state.start_capture(positions)
+            return {"ok": True, "n_layers": state._n_layers}
+
+        if cmd == "stop":
+            captured = state.stop_capture()
+            if not captured:
+                return {"ok": True, "n_layers": 0}
+            n_layers = max(captured.keys()) + 1
+            # Stack to [n_layers, n_forwards, n_pos, d_model]
+            layer_tensors = []
+            for i in range(n_layers):
+                t = captured.get(i)
+                if t is None or t.numel() == 0:
+                    return {"ok": False, "error": f"missing layer {i}"}
+                layer_tensors.append(t)
+            stacked = _torch.stack(layer_tensors, dim=0)
+            if arg:
+                _torch.save(stacked, arg)
+            return {"ok": True, "n_layers": n_layers,
+                    "shape": list(stacked.shape),
+                    "saved": arg}
+
+        return {"ok": False, "error": f"unknown cmd {cmd!r}"}
+
     def remove_lora(self, lora_id: int) -> bool:
         return self.model_runner.remove_lora(lora_id)
 

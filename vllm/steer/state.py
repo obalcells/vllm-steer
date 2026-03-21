@@ -71,6 +71,11 @@ class SteerState:
         self._handles: list[torch.utils.hooks.RemovableHandle] = []
         self._n_layers: int = 0
         self._layers: list[nn.Module] = []
+        # Capture mode: record residual-stream activations instead of steering.
+        # Used for direction extraction via vLLM (bypasses HF memory issues).
+        self.capture_mode: bool = False
+        self.capture_positions: list[int] | None = None  # None = last token only
+        self.captured: dict[int, list[torch.Tensor]] = {}
 
     # ------------------------------------------------------------------ #
     # Hook installation                                                  #
@@ -178,6 +183,34 @@ class SteerState:
         self.set_active(None)
 
     # ------------------------------------------------------------------ #
+    # Activation capture (for direction extraction via vLLM)             #
+    # ------------------------------------------------------------------ #
+
+    def start_capture(self, positions: list[int] | None = None) -> None:
+        """Enable capture mode. The pre-hook will record residual-stream
+        activations at ``positions`` (negative indexing from sequence end;
+        None = last token only) for every layer on every forward pass."""
+        self.capture_mode = True
+        self.capture_positions = positions or [-1]
+        self.captured = {i: [] for i in range(self._n_layers)}
+        logger.info(
+            "steer: capture mode ON (positions=%s, %d layers)",
+            self.capture_positions, self._n_layers,
+        )
+
+    def stop_capture(self) -> dict[int, torch.Tensor]:
+        """Disable capture and return the recorded activations as a dict of
+        {layer_idx: Tensor[n_forwards, n_positions, d_model]}."""
+        self.capture_mode = False
+        out = {}
+        for layer_idx, tensors in self.captured.items():
+            if tensors:
+                out[layer_idx] = torch.stack(tensors, dim=0).cpu()
+        self.captured = {}
+        logger.info("steer: capture mode OFF (%d layers recorded)", len(out))
+        return out
+
+    # ------------------------------------------------------------------ #
     # Helpers                                                            #
     # ------------------------------------------------------------------ #
 
@@ -258,12 +291,30 @@ def _find_residual(
 
 def _steer_pre_hook(module: nn.Module, args: tuple, kwargs: dict):
     """Forward-pre-hook: add steering vector to the residual-stream INPUT
-    of this decoder layer (HF ``register_forward_pre_hook`` semantics)."""
+    of this decoder layer (HF ``register_forward_pre_hook`` semantics).
+    Also supports capture mode for vLLM-based direction extraction."""
     state = _STATE
-    if state is None or not state.active or state.hook_mode != "pre":
+    if state is None:
         return None
     idx = getattr(module, _LAYER_IDX_ATTR, None)
     if idx is None:
+        return None
+
+    # Capture mode: record activations, don't steer.
+    if state.capture_mode:
+        tgt, _, _ = _find_residual(args, kwargs)
+        if tgt is not None and tgt.dim() >= 2:
+            # tgt shape: [seq_len, d_model] or [batch*seq, d_model]
+            # Record the specified positions (last-N tokens in the flattened seq).
+            positions = state.capture_positions or [-1]
+            try:
+                captured = tgt[positions].detach().clone()  # [n_pos, d_model]
+                state.captured.setdefault(idx, []).append(captured)
+            except (IndexError, RuntimeError):
+                pass  # sequence too short for requested positions
+        return None
+
+    if not state.active or state.hook_mode != "pre":
         return None
     vec = state.active.get(idx)
     if vec is None:

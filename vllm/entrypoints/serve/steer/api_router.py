@@ -66,5 +66,31 @@ async def clear_steer_vector(raw_request: Request):
     return JSONResponse(content={"ok": True})
 
 
+class CaptureBody(BaseModel):
+    cmd: str  # "start" or "stop"
+    positions: list[int] | None = None
+    save_path: str | None = None
+
+
+@router.post("/v1/steer_capture")
+async def steer_capture(body: CaptureBody, raw_request: Request):
+    import json as _json
+    arg = None
+    if body.cmd == "start" and body.positions is not None:
+        arg = _json.dumps(body.positions)
+    elif body.cmd == "stop" and body.save_path is not None:
+        arg = body.save_path
+    try:
+        results = await _engine_client(raw_request).collective_rpc(
+            "steer_capture", args=(body.cmd, arg)
+        )
+    except Exception as e:
+        logger.exception("steer_capture failed")
+        raise HTTPException(
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value, detail=str(e)
+        ) from e
+    return JSONResponse(content={"ok": True, "workers": results})
+
+
 def attach_router(app: FastAPI) -> None:
     app.include_router(router)
